@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crash Detection</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* New Color Palette: Cool Blue, Slate, and White */
+        body { background: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%); min-height: 100vh; } 
+        .control-panel { background: white; border-radius: 15px; padding: 30px; margin: 20px 0; box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+        .video-container { background: #000; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3); margin: 20px auto; max-width: 640px; width: 100%; }
+        .video-container img { width: 100%; height: auto; display: block; }
+        
+        /* Primary Button (Start Analysis) - Blue */
+        .btn-primary-custom { 
+            background: linear-gradient(135deg, #4299e1 0%, #63b3ed 100%); 
+            border: none; padding: 12px 30px; border-radius: 25px; 
+            font-weight: bold; margin: 5px; color: white; 
+        }
+        .btn-primary-custom:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        
+        /* Danger Button (Stop Analysis) - Dark Accent */
+        .btn-danger-custom { 
+            background: linear-gradient(135deg, #214151 0%, #4a5568 100%); 
+            border: none; padding: 12px 30px; border-radius: 25px; 
+            font-weight: bold; margin: 5px; color: white; 
+        }
+        
+        /* Success Button (Choose Video) - Green */
+        .btn-success-custom { 
+            background: linear-gradient(135deg, #48bb78 0%, #68d391 100%); 
+            border: none; padding: 12px 30px; border-radius: 25px; 
+            font-weight: bold; margin: 5px; color: white; 
+        }
+        
+        h2 { color: #214151; text-align: center; margin: 30px 0; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
+        .alert-custom { border-radius: 10px; margin-top: 15px; }
+        .file-upload-wrapper { position: relative; overflow: hidden; display: inline-block; }
+        .file-upload-wrapper input[type=file] { position: absolute; left: -9999px; }
+        .nav-link { color: white !important; font-weight: bold; }
+        .navbar-dark {
+            background-color: #214151 !important; /* Dark Slate Blue Navbar */
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/"> <i class="fas fa-car"></i> Driver Safety Monitor </a>
+        </div>
+        <div class="container">
+            <a class="nav-link d-inline" href="/drowsiness">Drowsiness Detection</a>
+            <a class="nav-link d-inline" href="/">Home</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2><i class="fas fa-exclamation-triangle"></i> Forward Collision Warning System</h2>
+        
+        <div class="control-panel">
+            <h4 class="mb-4">Video Analysis</h4>
+            <div class="row">
+                <div class="col-md-12">
+                    <h5><i class="fas fa-file-video"></i> Upload Dashcam Video</h5>
+                    <p class="text-muted">Upload a dashcam video to analyze potential collision hazards</p>
+                    <div class="file-upload-wrapper">
+                        <label for="videoUpload" class="btn btn-success-custom"> <i class="fas fa-upload"></i> Choose Video </label>
+                        <input type="file" id="videoUpload" accept="video/*">
+                    </div>
+                    <button id="processVideo" class="btn btn-primary-custom" style="display: none;"> <i class="fas fa-play"></i> Start Analysis </button>
+                    <button id="stopVideo" class="btn btn-danger-custom" style="display: none;"> <i class="fas fa-stop"></i> Stop Analysis </button>
+                </div>
+            </div>
+            <div id="alertBox" class="alert alert-custom" style="display: none;"></div>
+        </div>
+
+        <div class="video-container" id="videoDisplay" style="display: none;">
+            <img id="videoFeed" src="" alt="Video Feed"> 
+        </div>
+
+        <div class="control-panel mt-3">
+            <h5><i class="fas fa-info-circle"></i> System Information</h5>
+            <ul>
+                <li><strong>Detection Model:</strong> YOLOv8 for vehicle detection</li>
+                <li><strong>Tracked Vehicles:</strong> Cars, motorcycles, buses, and trucks</li>
+                <li><strong>ROI (Region of Interest):</strong> Blue trapezoid showing collision zone</li>
+                <li><strong>Collision Warning:</strong> Red bounding boxes indicate vehicles in danger zone</li>
+                <li><strong>Supported Formats:</strong> MP4, AVI, MOV, MKV</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let uploadedFile = null;
+
+        document.getElementById('videoUpload').addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                uploadedFile = e.target.files[0];
+                document.getElementById('processVideo').style.display = 'inline-block';
+                showAlert('Video selected: ' + uploadedFile.name, 'info');
+            }
+        });
+
+        document.getElementById('processVideo').addEventListener('click', function() {
+            if (!uploadedFile) {
+                showAlert('Please select a video file first.', 'warning');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('video', uploadedFile);
+            showAlert('Uploading video...', 'info');
+            
+            fetch('/uploadvideo', { method: 'POST', body: formData }) 
+                .then(response => {
+                    
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            throw new Error(`Server returned error (Status: ${response.status}). Check server console for details.`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('videoFeed').src = '/videofeed/crash'; 
+                        document.getElementById('videoDisplay').style.display = 'block';
+                        document.getElementById('processVideo').style.display = 'none';
+                        document.getElementById('stopVideo').style.display = 'inline-block';
+                        showAlert('Analyzing video for collision hazards...', 'success');
+                    } else {
+                        showAlert('Error: ' + data.error, 'danger');
+                    }
+                })
+                .catch(error => showAlert('Upload failed: ' + error.message, 'danger'));
+        });
+
+        document.getElementById('stopVideo').addEventListener('click', function() {
+            fetch('/stopprocessing', { method: 'POST' }) 
+                .then(() => {
+                    document.getElementById('videoFeed').src = '';
+                    document.getElementById('videoDisplay').style.display = 'none';
+                    document.getElementById('processVideo').style.display = 'inline-block';
+                    document.getElementById('stopVideo').style.display = 'none';
+                    showAlert('Video analysis stopped.', 'info');
+                });
+        });
+
+        function showAlert(message, type) {
+            const alertBox = document.getElementById('alertBox');
+            alertBox.className = 'alert alert-custom alert-' + type;
+            alertBox.textContent = message;
+            alertBox.style.display = 'block';
+            setTimeout(() => alertBox.style.display = 'none', 5000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Safety Monitor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* New Color Palette: Cool Blue, Slate, and White */
+        body {
+            background: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%); 
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .hero-section {
+            padding: 80px 0;
+            color: #214151; /* Dark Slate Blue */
+            text-align: center;
+        }
+        .hero-section h1 {
+            font-size: 3.5rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+            color: #214151;
+        }
+        .hero-section p {
+            font-size: 1.3rem;
+            margin-bottom: 40px;
+            color: #4a5568;
+        }
+        .feature-card {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            margin: 20px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+            height: 100%;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.15);
+        }
+        .feature-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            color: #4299e1; /* Blue Accent */
+        }
+        .feature-card h3 {
+            color: #214151;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        .feature-card p {
+            color: #666;
+            margin-bottom: 25px;
+        }
+        .btn-custom {
+            /* Button: Blue Gradient */
+            background: linear-gradient(135deg, #4299e1 0%, #63b3ed 100%);
+            color: white; 
+            border: none;
+            padding: 12px 35px;
+            border-radius: 25px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .btn-custom:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            color: white;
+            opacity: 0.9;
+        }
+        .navbar-dark {
+            background-color: #214151 !important; /* Dark Slate Blue Navbar */
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-car"></i> Driver Safety Monitor
+            </a>
+        </div>
+    </nav>
+
+    <div class="hero-section">
+        <div class="container">
+            <h1><i class="fas fa-shield-alt"></i> Driver Safety Monitor</h1>
+            <p>Advanced AI-powered system for drowsiness and crash detection</p>
+        </div>
+    </div>
+
+    <div class="container pb-5">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-bed"></i>
+                    </div>
+                    <h3>Drowsiness Detection</h3>
+                    <p>Real-time monitoring of driver alertness using Eye Aspect Ratio (EAR), Mouth Aspect Ratio (MAR), and Head Pose Estimation. Detects drowsiness, yawning, and distraction instantly.</p>
+                    <ul class="text-start mb-4">
+                        <li><strong>Webcam Support:</strong> Live monitoring from your camera</li>
+                        <li><strong>Video Upload:</strong> Analyze pre-recorded videos</li>
+                        <li><strong>Real-time Alerts:</strong> Instant drowsiness warnings</li>
+                        <li><strong>Metrics Display:</strong> EAR, MAR, Yaw, Pitch tracking</li>
+                    </ul>
+                    <a href="/drowsiness" class="btn btn-custom">
+                        <i class="fas fa-play"></i> Start Detection
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3>Crash Detection</h3>
+                    <p>YOLO-based Forward Collision Warning (FCW) system that detects vehicles in your path and alerts you of potential collisions using Region of Interest (ROI) analysis.</p>
+                    <ul class="text-start mb-4">
+                        <li><strong>YOLO Detection:</strong> Accurate vehicle identification</li>
+                        <li><strong>ROI Analysis:</strong> Focus on collision zone</li>
+                        <li><strong>Multiple Vehicles:</strong> Cars, motorcycles, buses, trucks</li>
+                        <li><strong>Visual Alerts:</strong> Real-time collision warnings</li>
+                    </ul>
+                    <a href="/crash" class="btn btn-custom">
+                        <i class="fas fa-video"></i> Analyze Video
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

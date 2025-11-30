@@ -1,0 +1,10 @@
+# Ignore directories
+__pycache__/
+*.pyc
+uploads/
+sorted_dataset/
+yolo_env/
+.env
+.vscode/
+*.egg-info
+

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drowsiness Detection</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+       
+        body { background: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%); min-height: 100vh; } 
+        .control-panel { background: white; border-radius: 15px; padding: 30px; margin: 20px 0; box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+        .video-container { background: #000; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3); margin: 20px auto; max-width: 640px; width: 100%; }
+        .video-container img { width: 100%; height: auto; display: block; }
+        
+        
+        .btn-primary-custom { 
+            background: linear-gradient(135deg, #4299e1 0%, #63b3ed 100%); 
+            border: none; padding: 12px 30px; border-radius: 25px; 
+            font-weight: bold; margin: 5px; color: white;
+        }
+        .btn-primary-custom:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(0,0,0,0.3); opacity: 0.9; }
+        
+      
+        .btn-danger-custom { 
+            background: linear-gradient(135deg, #f56565 0%, #fc8181 100%); 
+            border: none; padding: 12px 30px; border-radius: 25px; 
+            font-weight: bold; margin: 5px; color: white;
+        }
+        
+    
+        .btn-success-custom { 
+            background: linear-gradient(135deg, #48bb78 0%, #68d391 100%); 
+            border: none; padding: 12px 30px; border-radius: 25px; 
+            font-weight: bold; margin: 5px; color: white;
+        }
+        
+        h2 { color: #214151; text-align: center; margin: 30px 0; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
+        .alert-custom { border-radius: 10px; margin-top: 15px; }
+        .file-upload-wrapper { position: relative; overflow: hidden; display: inline-block; }
+        .file-upload-wrapper input[type=file] { position: absolute; left: -9999px; }
+        .nav-link { color: white !important; font-weight: bold; }
+        .navbar-dark {
+            background-color: #214151 !important; /* Dark Slate Blue Navbar */
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/"> <i class="fas fa-car"></i> Driver Safety Monitor </a>
+        </div>
+        <div class="container">
+            <a class="nav-link d-inline" href="/">Home</a>
+            <a class="nav-link d-inline" href="/crash">Crash Detection</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2><i class="fas fa-bed"></i> Drowsiness Detection System</h2>
+        
+        <div class="control-panel">
+            <h4 class="mb-4">Detection Mode</h4>
+            <div class="row">
+                <div class="col-md-6">
+                    <h5><i class="fas fa-camera"></i> Webcam Detection</h5>
+                    <p class="text-muted">Use your webcam for real-time drowsiness monitoring</p>
+                    <button id="startWebcam" class="btn btn-primary-custom"> <i class="fas fa-play"></i> Start Webcam </button>
+                    <button id="calibrateEar" class="btn btn-success-custom" style="display: none;"> <i class="fas fa-ruler-combined"></i> Calibrate All </button> 
+                    <button id="stopWebcam" class="btn btn-danger-custom" style="display: none;"> <i class="fas fa-stop"></i> Stop Webcam </button>
+                </div>
+                <div class="col-md-6">
+                    <h5><i class="fas fa-file-video"></i> Video Upload</h5>
+                    <p class="text-muted">Upload a video file for drowsiness analysis</p>
+                    <div class="file-upload-wrapper">
+                        <label for="videoUpload" class="btn btn-success-custom"> <i class="fas fa-upload"></i> Choose Video </label>
+                        <input type="file" id="videoUpload" accept="video/*">
+                    </div>
+                    <button id="processVideo" class="btn btn-primary-custom" style="display: none;"> <i class="fas fa-play"></i> Process Video </button>
+                    <button id="stopVideo" class="btn btn-danger-custom" style="display: none;"> <i class="fas fa-stop"></i> Stop Processing </button>
+                </div>
+            </div>
+            <div id="alertBox" class="alert alert-custom" style="display: none;"></div>
+        </div>
+
+        <div class="video-container" id="videoDisplay" style="display: none;">
+            <img id="videoFeed" src="" alt="Video Feed">
+        </div>
+
+        <div class="control-panel mt-3">
+            <h5><i class="fas fa-info-circle"></i> Detection Information</h5>
+            <ul>
+                <li><strong>EAR (Eye Aspect Ratio)</strong> Measures eye openness. Low values indicate closed eyes.</li>
+                <li><strong>MAR (Mouth Aspect Ratio)</strong> Detects yawning when ratio exceeds threshold.</li>
+                <li><strong>Yaw/Pitch</strong> Head orientation to detect distraction and head nodding.</li>
+                <li><strong>Alerts</strong> Red text indicates drowsiness, yawning, or distraction detected.</li>
+                <li><strong>EAR Threshold:</strong> <span id="earThreshold">0.280 (Default)</span></li> 
+                <li><strong>MAR Threshold:</strong> <span id="marThreshold">0.800 (Default)</span></li>
+                <li><strong>Pitch Threshold:</strong> <span id="pitchThreshold">10.0° (Default)</span></li>
+                <li><strong>Yaw Threshold:</strong> <span id="yawThreshold">20.0° (Default)</span></li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentMode = null;
+        let uploadedFile = null;
+        let calibrationInterval = null;
+        let isCalibrating = false;
+
+        function updateThresholdDisplay(data) {
+            const status = isCalibrating ? 'IN PROGRESS' : (data.ear_thresh === '0.280' ? 'Default' : 'Calibrated');
+            
+            document.getElementById('earThreshold').textContent = data.ear_thresh ? `${data.ear_thresh} (${status})` : 'N/A';
+            document.getElementById('marThreshold').textContent = data.mar_thresh ? `${data.mar_thresh} (${status})` : 'N/A';
+            document.getElementById('pitchThreshold').textContent = data.pitch_thresh ? `${data.pitch_thresh} (${status})` : 'N/A';
+            document.getElementById('yawThreshold').textContent = data.yaw_thresh ? `${data.yaw_thresh} (${status})` : 'N/A';
+        }
+
+        function fetchThresholds() {
+             fetch('/get_current_thresholds')
+                .then(response => response.json())
+                .then(data => {
+                    const wasCalibrating = isCalibrating;
+                    isCalibrating = data.is_calibrating; 
+
+                    updateThresholdDisplay(data);
+                    
+                    if (wasCalibrating && !isCalibrating && calibrationInterval) {
+                        clearInterval(calibrationInterval);
+                        calibrationInterval = null;
+                        document.getElementById('calibrateEar').disabled = false;
+                        document.getElementById('stopWebcam').disabled = false;
+                        showAlert(`Calibration successful! New thresholds applied.`, 'success');
+                    }
+                })
+                .catch(error => console.error("Error fetching thresholds:", error));
+        }
+
+        fetchThresholds();
+
+        document.getElementById('startWebcam').addEventListener('click', function() {
+            currentMode = 'webcam';
+            document.getElementById('videoFeed').src = '/videofeed/webcam?' + new Date().getTime(); 
+            document.getElementById('videoDisplay').style.display = 'block';
+            document.getElementById('startWebcam').style.display = 'none';
+            document.getElementById('stopWebcam').style.display = 'inline-block';
+            document.getElementById('calibrateEar').style.display = 'inline-block'; 
+            showAlert('Webcam starting! Default thresholds are active. Click "Calibrate All" for best results.', 'success');
+        });
+
+        document.getElementById('stopWebcam').addEventListener('click', function() {
+            document.getElementById('videoFeed').src = '';
+            document.getElementById('videoDisplay').style.display = 'none';
+            document.getElementById('startWebcam').style.display = 'inline-block';
+            document.getElementById('stopWebcam').style.display = 'none';
+            document.getElementById('calibrateEar').style.display = 'none'; 
+            currentMode = null;
+            if (calibrationInterval) {
+                clearInterval(calibrationInterval);
+            }
+            showAlert('Webcam stopped.', 'info');
+        });
+
+        document.getElementById('calibrateEar').addEventListener('click', function() {
+            if (currentMode !== 'webcam') {
+                showAlert('Please start the webcam first.', 'warning');
+                return;
+            }
+            
+            showAlert('Initiating FULL calibration... Look straight ahead with eyes OPEN. Detection paused.', 'info');
+            document.getElementById('calibrateEar').disabled = true; 
+            document.getElementById('stopWebcam').disabled = true;
+            isCalibrating = true;
+            
+            fetchThresholds();
+
+            fetch('/start_calibration', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (calibrationInterval) clearInterval(calibrationInterval);
+                        calibrationInterval = setInterval(fetchThresholds, 2000); 
+                    } else {
+                        showAlert('Calibration failed to start: ' + data.error, 'danger');
+                        document.getElementById('calibrateEar').disabled = false;
+                        document.getElementById('stopWebcam').disabled = false;
+                        isCalibrating = false;
+                        fetchThresholds(); 
+                    }
+                })
+                .catch(error => showAlert('Calibration request failed: ' + error, 'danger'));
+        });
+
+        document.getElementById('videoUpload').addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                uploadedFile = e.target.files[0];
+                document.getElementById('processVideo').style.display = 'inline-block';
+                showAlert('Video selected: ' + uploadedFile.name, 'info');
+            }
+        });
+
+        document.getElementById('processVideo').addEventListener('click', function() {
+            if (!uploadedFile) {
+                showAlert('Please select a video file first.', 'warning');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('video', uploadedFile);
+            showAlert('Uploading video...', 'info');
+            
+            fetch('/uploadvideo', { method: 'POST', body: formData }) 
+                .then(response => {
+                    // Robustly handle non-JSON responses (413, 500)
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            throw new Error(`Server returned error (Status: ${response.status}). Check server console for details.`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        currentMode = 'video';
+                        document.getElementById('videoFeed').src = '/videofeed/drowsiness'; 
+                        document.getElementById('videoDisplay').style.display = 'block';
+                        document.getElementById('processVideo').style.display = 'none';
+                        document.getElementById('stopVideo').style.display = 'inline-block';
+                        showAlert('Processing video...', 'success');
+                    } else {
+                        showAlert('Error: ' + data.error, 'danger');
+                    }
+                })
+                .catch(error => showAlert('Upload failed: ' + error.message, 'danger'));
+        });
+
+        document.getElementById('stopVideo').addEventListener('click', function() {
+            fetch('/stopprocessing', { method: 'POST' }) 
+                .then(() => {
+                    document.getElementById('videoFeed').src = '';
+                    document.getElementById('videoDisplay').style.display = 'none';
+                    document.getElementById('processVideo').style.display = 'inline-block';
+                    document.getElementById('stopVideo').style.display = 'none';
+                    currentMode = null;
+                    showAlert('Video processing stopped.', 'info');
+                });
+        });
+
+        function showAlert(message, type) {
+            const alertBox = document.getElementById('alertBox');
+            alertBox.className = 'alert alert-custom alert-' + type;
+            alertBox.textContent = message;
+            alertBox.style.display = 'block';
+            setTimeout(() => alertBox.style.display = 'none', 5000);
+        }
+    </script>
+</body>
+</html>

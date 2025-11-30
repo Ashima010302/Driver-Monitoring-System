@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+driver-safety:
+build: .
+image: driver-safety:latest
+container_name: driver_safety
+restart: unless-stopped
+ports:
+- "5000:5000"
+volumes:
+- ./uploads:/app/uploads
+- ./models:/app/models
+- ./alert.wav:/app/alert.wav
+environment:
+- FLASK_ENV=production
+devices:
+- "/dev/video0:/dev/video0"
