@@ -23,11 +23,11 @@ current_video_path = None
 stop_processing = False
 processing_lock = threading.Lock()
 
-# Global capture holder and calibration progress
+# Global capture holder and calibration progress/candidate
 CAP_HOLDER = {
     'cap': None,
     'processor': None,
-    'ear_thresh': 0.24,  
+    'ear_thresh': 0.24,  # default (calibration will override)
     'mar_thresh': 0.60,
     'pitch_thresh': 12.0,
     'yaw_thresh': 25.0,
@@ -55,7 +55,7 @@ def crash_page():
 def generate_drowsiness_webcam():
     global CAP_HOLDER, CALIBRATION_FLAG
 
-
+    # release previous cap if present
     try:
         old = CAP_HOLDER.get('cap')
         if old is not None:
@@ -69,7 +69,7 @@ def generate_drowsiness_webcam():
     except Exception as e:
         print("Error releasing previous cap:", e)
 
-  
+    # open camera with retry
     cap = None
     for attempt in range(5):
         cap = cv2.VideoCapture(0)
@@ -97,7 +97,7 @@ def generate_drowsiness_webcam():
                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
         return
 
-    
+    # set camera properties
     try:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
@@ -142,7 +142,7 @@ def generate_drowsiness_webcam():
                 }
                 landmarks = []
 
-         
+            # If calibration running, override alert and show progress on top of camera
             if CALIBRATION_FLAG.is_set():
                 progress = CAP_HOLDER.get('calib_progress', 0.0)
                 dms_status['is_alert_needed'] = False
@@ -151,12 +151,12 @@ def generate_drowsiness_webcam():
                 if CAP_HOLDER.get('processor') is not None:
                     CAP_HOLDER['processor'].local_ear_counter = 0
 
-
+            # overlays: show EAR + threshold info (current vs provisional)
             is_calibrated = bool(CAP_HOLDER.get('is_calibrated', False))
             ear_thresh_display = CAP_HOLDER.get('ear_thresh', 0.0)
             calib_candidate = CAP_HOLDER.get('calib_candidate', None)
 
-       
+            # top-left: show threshold info (Current/Calibrated)
             label = f"EAR T: {ear_thresh_display:.3f}"
             if is_calibrated:
                 label = "✅ Calibrated " + label
@@ -165,7 +165,7 @@ def generate_drowsiness_webcam():
             cv2.putText(frame, label, (10, 28),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 
-          
+            # show candidate & progress while calibrating, else show MAR & HPE
             if CALIBRATION_FLAG.is_set() and calib_candidate is not None:
                 cv2.putText(frame, f"Candidate EAR: {calib_candidate:.3f}", (10, 58),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 215, 255), 2)
@@ -181,7 +181,7 @@ def generate_drowsiness_webcam():
                 cv2.putText(frame, f"Pitch: {dms_status.get('pitch', 0):.1f}° (T: {CAP_HOLDER['pitch_thresh']:.1f}°)", (10, 148),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-           
+            # bottom banner with alert text
             alert_text = dms_status.get('alert_text', 'Monitoring')
             is_alert = dms_status.get('is_alert_needed', False)
             color = (0, 0, 255) if is_alert else (0, 165, 0)
@@ -189,7 +189,7 @@ def generate_drowsiness_webcam():
             cv2.putText(frame, alert_text, (10, h-20),
                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
 
-            
+            # yield MJPEG frame
             ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
             frame_bytes = buffer.tobytes()
             yield (b'--frame\r\n'
@@ -205,7 +205,7 @@ def generate_drowsiness_webcam():
             pass
         print("Webcam released (robust generator)")
 
-
+# [generate_drowsiness_video and generate_crash_video unchanged - keeping original]
 def generate_drowsiness_video(video_path):
     cap = cv2.VideoCapture(video_path)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -266,7 +266,8 @@ def generate_crash_video(video_path):
 
         fcw_alert_triggered, processed_frame = detect_crash_hazard(fcw_model, frame, roi_polygon)
 
-        
+        # OPTIONAL: small fixed delay to avoid overloading CPU
+        # time.sleep(0.01)  # 10 ms (you can comment this out if still slow)
 
         ret, buffer = cv2.imencode('.jpg', processed_frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
         yield (b'--frame\r\n'
@@ -274,7 +275,7 @@ def generate_crash_video(video_path):
 
     cap.release()
 
-# Routes 
+# Routes unchanged except FIXED calibration_task()
 @app.route('/videofeed/webcam')
 def video_feed_webcam():
     return Response(generate_drowsiness_webcam(),
@@ -358,13 +359,14 @@ def start_calibration_route():
             CAP_HOLDER['calib_progress'] = 0.0
             CAP_HOLDER['calib_candidate'] = None
 
-    def calibration_task():  
+    def calibration_task():  # ✅ FIXED VERSION
         try:
             print("CalibrationTask: starting")
-         
+            # Get tuple: (ear, mar, pitch, yaw) - NO progress_cb!
             calibrated_tuple = full_calibration(cap, FACE_MESH, calibration_frames=20, max_frame_tries=120)
             print("CalibrationTask: full_calibration returned:", calibrated_tuple)
             
+            # Convert tuple → dict with correct keys
             new_thresholds = {
                 'ear': calibrated_tuple[0],
                 'mar': calibrated_tuple[1],
@@ -373,6 +375,7 @@ def start_calibration_route():
             }
             print("CalibrationTask: converted to dict:", new_thresholds)
 
+            # Update CAP_HOLDER with new thresholds
             CAP_HOLDER.update({
                 'ear_thresh': new_thresholds['ear'],
                 'mar_thresh': new_thresholds['mar'],
@@ -380,16 +383,18 @@ def start_calibration_route():
                 'yaw_thresh': new_thresholds['yaw']
             })
 
-          
+            # CRITICAL: Update LIVE processor
             proc = CAP_HOLDER.get('processor')
             if proc is not None:
-                proc.update_thresholds(new_thresholds)  
-              
+                proc.update_thresholds(new_thresholds)  # Now passes correct dict!
+                # reset latest metrics to avoid stale values
                 proc.latest_ear = 0.0
                 proc.latest_mar = 0.0
                 proc.latest_pitch = 0.0
                 proc.latest_yaw = 0.0
-              
+                print("✅ Processor thresholds UPDATED!")
+            else:
+                print("⚠️ Processor not available during calibration")
 
             CAP_HOLDER['is_calibrated'] = True
             CAP_HOLDER['calib_progress'] = 100.0

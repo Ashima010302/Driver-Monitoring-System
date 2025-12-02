@@ -9,7 +9,7 @@ from src.utils import EYE_AR_CONSEC_FRAMES, LEFT_EYE, RIGHT_EYE, play_alarm_soun
 def initialize_dms(skip_calib, cap):
     if skip_calib or cap is None:
         # Use defaults
-        default_thresholds = {'ear': 0.22, 'mar': 0.60, 'pitch': 12.0, 'yaw': 25.0}
+        default_thresholds = {'ear': 0.22, 'mar': 0.60, 'pitch': 20.0, 'yaw': 35.0}
       
     else:
       
@@ -56,17 +56,21 @@ class DMSProcessorState:
 
         self.local_ear_counter = 0
         
-        self.local_ear_consec_frames = 8
+        self.local_ear_consec_frames = 60
         self.drowsy_eye_counter = 0
-        self.drowsy_eye_frames_threshold = 90 
+        self.drowsy_eye_frames_threshold = 60
 
       
         self.yawn_counter = 0
-        self.yawn_frames_threshold = 90  
+        self.yawn_frames_threshold = 250 
 
         
         self.distraction_counter = 0
-        self.distraction_frames_threshold = 90  
+        self.distraction_frames_threshold =250
+
+        self.recovery_frames = 20
+        self.yawn_recovery_counter = 0
+        self.distraction_recovery_counter = 0
 
         self.latest_ear = 0.0
         self.latest_mar = 0.0
@@ -108,8 +112,7 @@ class DMSProcessorState:
             
         else:
             if self.local_ear_counter != 0:
-                print("EYES OPEN (reset counter)")
-            self.local_ear_counter = 0
+                self.local_ear_counter = 0
 
         # Fire only when we've seen enough consecutive frames
         if self.local_ear_counter >= self.local_ear_consec_frames:
