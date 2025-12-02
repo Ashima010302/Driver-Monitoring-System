@@ -2,17 +2,20 @@
 import cv2
 import numpy as np
 import os
+import threading  # Added threading for non-blocking alarm
 from ultralytics import YOLO
+
+# Import alarm utilities from the project's utility script
+from src.utils import play_alarm_sound, ALARM_SOUND_PATH
 
 # --- FCW CONSTANTS ---
 FCW_MODEL_PATH = "models/yolov8n.pt"
 
-
-# Mapping from YOLO class index to a readable name
+# Mapping from YOLO class index to readable names
 CLASS_NAMES = {
-    2: 'Car', 
-    3: 'Motorcycle', 
-    5: 'Bus', 
+    2: 'Car',
+    3: 'Motorcycle',
+    5: 'Bus',
     7: 'Truck'
 }
 
@@ -22,22 +25,22 @@ def setup_fcw_environment(frame_w, frame_h):
     if not os.path.exists(FCW_MODEL_PATH):
         print(f"FCW Warning: Model file '{FCW_MODEL_PATH}' not found. FCW will be disabled.")
         return None, None
-        
+
     print("Loading FCW model...")
-    fcw_model = YOLO(FCW_MODEL_PATH) 
-    
-    # FIX: Define a more restrictive trapezoid ROI to reduce false alerts.
-    # The base is now 10% inward, focusing the detection on the central lanes.
+    fcw_model = YOLO(FCW_MODEL_PATH)
+
+    # Define a more restrictive trapezoid ROI
     ROI_POLYGON = np.array([
-        (int(frame_w * 0.2), frame_h),      # Bottom Left (20% from left)
-        (int(frame_w * 0.8), frame_h),      # Bottom Right (20% from right)
-        (int(frame_w * 0.6), int(frame_h * 0.6)), # Top Right (40% width, high center)
-        (int(frame_w * 0.4), int(frame_h * 0.6))  # Top Left (40% width, high center)
+        (int(frame_w * 0.2), frame_h),
+        (int(frame_w * 0.8), frame_h),
+        (int(frame_w * 0.6), int(frame_h * 0.6)),
+        (int(frame_w * 0.4), int(frame_h * 0.6))
     ], dtype=np.int32)
-    
+
     ROI_POLYGON = ROI_POLYGON.reshape((-1, 1, 2))
-    
+
     return fcw_model, ROI_POLYGON
+
 
 def get_center_bottom_point(box):
     """Calculates the center-bottom point of the detection box."""
@@ -46,30 +49,29 @@ def get_center_bottom_point(box):
     bottom_y = y_max
     return center_x, bottom_y
 
+
 def is_point_in_roi(point, roi_polygon):
     """Checks if a point is inside the ROI polygon."""
-    # FIX: Convert point tuple (int, int) to (float, float) for OpenCV compatibility
     point_float = (float(point[0]), float(point[1]))
     return cv2.pointPolygonTest(roi_polygon, point_float, False) >= 0
+
 
 def run_fcw_detection(fcw_model, frame, roi_polygon=None):
     """
     Robust FCW detection (vehicle-only) with defensive types for pointPolygonTest.
-    Detects only: bicycle(1), car(2), motorcycle(3), bus(5) optional, truck(7).
+    Detects only: bicycle(1), car(2), motorcycle(3), bus(5), truck(7).
     """
     h, w, _ = frame.shape
     fcw_alert = False
+    processed_frame = frame.copy()
 
-    # VEHICLE classes (COCO)
-    VEHICLE_IDS = {1, 2, 3, 5, 7}  # bicycle, car, motorcycle, bus, truck
+    VEHICLE_IDS = {1, 2, 3, 5, 7}
 
-    # Safety zone parameters
     SAFETY_ZONE_DEPTH = 0.20
     SAFETY_ZONE_WIDTH = 0.60
     MIN_BOX_REL = 0.06
     MIN_BOX_PX = int(h * 0.03)
 
-    # Build safety polygon (4 points)
     cx = int(w // 2)
     bottom_y = int(h)
     far_y = int(h - h * SAFETY_ZONE_DEPTH)
@@ -82,82 +84,79 @@ def run_fcw_detection(fcw_model, frame, roi_polygon=None):
         (cx + far_w // 2, far_y),
         (cx - far_w // 2, far_y)
     ]
-    # Ensure polygon is a well-formed Nx2 int32 numpy array
     safety_poly = np.asarray(poly, dtype=np.int32).reshape(-1, 2)
 
-    # Draw translucent safety zone (visual)
-    overlay = frame.copy()
+    # Draw translucent safety zone
+    overlay = processed_frame.copy()
     cv2.fillPoly(overlay, [safety_poly], (0, 165, 255))
-    cv2.addWeighted(overlay, 0.15, frame, 0.85, 0)
-    cv2.polylines(frame, [safety_poly], True, (0, 120, 255), 2)
+    cv2.addWeighted(overlay, 0.15, processed_frame, 0.85, 0)
+    cv2.polylines(processed_frame, [safety_poly], True, (0, 120, 255), 2)
 
-    # Run model safely
+    # Run YOLO safely
     try:
-        results = fcw_model(frame, verbose=False)
+        results = fcw_model(processed_frame, verbose=False)
         result = results[0]
     except Exception as e:
-        # model call failed — return frame unchanged
         print("FCW model call failed:", e)
-        return False, frame
+        return False, processed_frame
 
     if not hasattr(result, "boxes"):
-        return False, frame
+        return False, processed_frame
 
-    # Iterate boxes
+    # Iterate detections
     for box in result.boxes:
         try:
             xyxy = box.xyxy[0].cpu().numpy().astype(int)
-            x1, y1, x2, y2 = int(xyxy[0]), int(xyxy[1]), int(xyxy[2]), int(xyxy[3])
+            x1, y1, x2, y2 = xyxy
             cls_id = int(box.cls.cpu().numpy())
         except Exception:
-            # extraction failed for this box — skip it
             continue
 
-        # Only vehicles
         if cls_id not in VEHICLE_IDS:
             continue
 
         box_h = max(1, y2 - y1)
         rel_h = float(box_h) / float(h)
+
         if (rel_h < MIN_BOX_REL) and (box_h < MIN_BOX_PX):
-            # too far — ignore
             continue
 
-        # bottom-center point: force plain Python ints
         col_x = int((x1 + x2) // 2)
         col_y = int(y2)
-        pt = (int(col_x), int(col_y))  # explicit Python tuple of ints
+        pt = (col_x, col_y)
 
-        # pointPolygonTest can be picky about types/shape — guard it
         inside = False
         try:
-            # safety_poly is Nx2 int32 numpy array, pt is (int,int) -> OK
             val = cv2.pointPolygonTest(safety_poly, (float(pt[0]), float(pt[1])), False)
-            inside = (val >= 0)
-        except Exception as e:
-            # defensive: if any type error, consider it outside (no alert)
-            # optionally print once for debugging (comment out in production)
-            # print("FCW detection error in pointPolygonTest:", e)
+            inside = val >= 0
+        except Exception:
             inside = False
+
+        color = (0, 0, 255) if inside else (0, 255, 0)
+        label = "WARNING" if inside else "VEHICLE"
 
         if inside:
             fcw_alert = True
-            color = (0, 0, 255)
-            label = "WARNING"
-        else:
-            color = (0, 255, 0)
-            label = "VEHICLE"
 
-        # draw NORMAL bounding box and label
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 3)
-        cv2.putText(frame, label, (x1, max(12, y1 - 10)),
+        cv2.rectangle(processed_frame, (x1, y1), (x2, y2), color, 3)
+        cv2.putText(processed_frame, label, (x1, max(12, y1 - 10)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
-    # bottom banner
+    # Trigger alarm safely
+    if fcw_alert:
+        try:
+            alarm_thread = threading.Thread(target=play_alarm_sound, args=(ALARM_SOUND_PATH,))
+            alarm_thread.daemon = True
+            alarm_thread.start()
+        except Exception as e:
+            print(f"Failed to start crash alarm thread: {e}")
+
+    # Bottom status banner
     banner_color = (0, 0, 255) if fcw_alert else (0, 165, 0)
     status = "COLLISION WARNING!" if fcw_alert else "Monitoring: Safe"
-    cv2.rectangle(frame, (0, h - 70), (w, h), banner_color, -1)
-    cv2.putText(frame, status, (20, h - 25),
+
+    cv2.rectangle(processed_frame, (0, h - 70), (w, h), banner_color, -1)
+    cv2.putText(processed_frame, status, (20, h - 25),
                 cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 3)
 
-    return fcw_alert, frame
+    return fcw_alert, processed_frame
